@@ -30,7 +30,7 @@ type WebSocketClient struct {
 
 	/*message callback handlers, will be trigger
 	  when a specified message is received from server*/
-	PingMessageHandler  func() // Ping
+	PingMessageHandler  func() // Ping, there is a default implementation if user haven't implemented
 	PongMessageHandler  func() // Pong
 	CloseMessageHandler func() // Close
 	// Text message
@@ -69,21 +69,11 @@ func NewWebSocketClient(wsUrl string) (*WebSocketClient, error) {
 	wsClient.Response = make(chan Response)
 	wsClient.Request = make(chan Request)
 	wsClient.shouldClose = make(chan string)
-	//wsClient.Conn.SetPongHandler(func(message string) error {
-	//	fmt.Println("received pong message")
-	//	err := wsClient.Conn.WriteControl(websocket.PingMessage, []byte(`{"msg":"ping"}`), time.Now().Add(10*time.Second))
-	//	return err
-	//})
-	//wsClient.Conn.SetPingHandler(func(appData string) error {
-	//	fmt.Println("received ping message ")
-	//	err := wsClient.Conn.WriteControl(websocket.PongMessage, []byte(`{"msg":"pong"}`), time.Now().Add(30*time.Second))
-	//	return err
-	//})
 	return wsClient, nil
 }
 
 func (wc *WebSocketClient) Close() {
-	fmt.Println("====2=====")
+	log.Println("websocket client is going to close")
 	wc.Conn.Close()
 	close(wc.Response)
 	close(wc.Request)

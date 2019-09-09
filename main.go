@@ -6,7 +6,6 @@ import (
 	parser "runtime_api/Parser"
 	rc "runtime_api/methods"
 	"time"
-	//"time"
 )
 
 func main() {
@@ -14,10 +13,9 @@ func main() {
 	//sessId := fmt.Sprintf("jian%v",random)
 	//wsUrl := fmt.Sprintf("ws://127.0.0.1:3000/sockjs/%v/%s/websocket",random,sessId)
 	wsUrl := fmt.Sprintf("ws://127.0.0.1:3000/websocket")
-	//wsUrl := "ws://127.0.0.1:3000/sockjs/824/4n2rq6yk/websocket"
 	wsClient, err := rc.NewWebSocketClient(wsUrl)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	defer wsClient.Close()
