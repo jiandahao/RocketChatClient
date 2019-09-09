@@ -165,7 +165,7 @@ func (wc *WebSocketClient) ReadMessage() {
 
 		if mt == websocket.TextMessage {
 			// create a new goroutine to handler text message
-			fmt.Println("receive message: ", string(p))
+			log.Println("receive message: ", string(p))
 			go wc.TextMessageHandler(mt, string(p), msg)
 		}
 
@@ -187,7 +187,7 @@ func (wc *WebSocketClient) WriteMessage() {
 				return
 			}
 		case <-wc.shouldClose:
-			log.Println("Write routine going to close")
+			log.Println("Write routine is going to close")
 			wc.wg.Done()
 			return
 		}
