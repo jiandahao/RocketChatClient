@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -12,6 +13,8 @@ once a new message is coming, the received result will be like the following for
 (Note: if you haven't subscribed the "stream-room-messages" event, you will not received
 the message notification. you could use the SubscribeStreamRoomMessage api to subscribe,
 see runtime_api/methods/subRoomMessage.go)
+
+for stream-room-messages:
 {
 	"msg": "changed",
 	"collection": "stream-room-messages",
@@ -38,9 +41,20 @@ see runtime_api/methods/subRoomMessage.go)
 		}]
 	}
 }
+
+for stream-notify-room :
+{
+	"msg": "changed",
+	"collection": "stream-notify-room",
+	"id": "id",
+	"fields": {
+		"eventName": "GENERAL/typing",
+		"args": ["jiandahao", false]
+	}
+}
 */
 type (
-	/*changed meesage for stream-room-messages*/
+	/*changed message for stream-room-messages*/
 	ChangedMessageForSRM struct {
 		Msg        string     `json:"msg"`
 		Collection string     `json:"collection"`
@@ -48,7 +62,7 @@ type (
 		Fields     *SRMFields `json:"fields"`
 	}
 
-	// stream-room-message fileds
+	// stream-room-message fields
 	SRMFields struct {
 		EventName string     `json:"eventName"`
 		Args      []*SRMArgs `json:"args"`
@@ -72,7 +86,7 @@ type (
 	}
 
 	Date struct {
-		Date int64 `json:"$date"`
+		Date int64 `json:"$date"` //rocket.chat use timestamp in nanoseconds
 	}
 
 	/*changed message for stream-notify-room*/
@@ -84,36 +98,21 @@ type (
 	}
 
 	SNRFields struct {
-		EventName string        `json:"eventName"`
-		Args      []interface{} `json:"args"`
+		EventName string    `json:"eventName"`
+		Args      []*SNRArg `json:"args"`
+	}
+
+	SNRArg struct {
+		MsgId string `json:"_id"`
 	}
 )
 
 /*Parse message for stream-room-message*/
 func ParseChangesForSRM(msgJSONStr string) *ChangedMessageForSRM {
 	var results ChangedMessageForSRM
-	fmt.Println(msgJSONStr)
 	err := json.Unmarshal([]byte(msgJSONStr), &results)
 	if err != nil {
 		log.Println("invalid json string, chould not parse the stream-room-message type message")
-		return nil
-	}
-	fmt.Printf("You have a new message\n"+
-		"from:%s\n"+
-		"at:%v\n"+
-		"message:%s", results.GetSenderName(),
-		results.GetSendTime(),
-		results.GetMessage())
-	return &results
-}
-
-/*Parse message for stream-notify-room*/
-func ParseChangesForSNR(msgJSONStr string) *ChangedMessageForSNR {
-	var results ChangedMessageForSNR
-	fmt.Println(msgJSONStr)
-	err := json.Unmarshal([]byte(msgJSONStr), &results)
-	if err != nil {
-		log.Println("invalid json string, chould not parse the stream-notify-room type message: " + err.Error())
 		return nil
 	}
 	return &results
@@ -184,7 +183,62 @@ func (cm *ChangedMessageForSRM) GetSendTime() string {
 	if args := cm.GetArgs(); args != nil {
 		ts := args.Timestamp.Date
 		// TODO correct the time parsing
-		return time.Unix(ts, 0).Format("2006-01-02 15:04:05")
+		return time.Unix(0, ts*1000000).Format("2006-01-02 15:04:05")
+	}
+	return ""
+}
+
+/*Parse message for stream-notify-room*/
+/*{"msg":"changed","collection":"stream-notify-room","id":"id","fields":
+{"eventName":"GENERAL/deleteMessage","args":[{"_id":"KfZZZfMzv76enWwWG"}]}}*/
+func ParseChangesForSNR(msgJSONStr string) *ChangedMessageForSNR {
+	var results ChangedMessageForSNR
+	fmt.Println(msgJSONStr)
+	err := json.Unmarshal([]byte(msgJSONStr), &results)
+	if err != nil {
+		log.Println("invalid json string, chould not parse the stream-notify-room type message: " + err.Error())
+		return nil
+	}
+	return &results
+}
+
+func (cs *ChangedMessageForSNR) GetCollection() string {
+	if cs == nil {
+		log.Println("Error ChangedMessage results: empty")
+		return ""
+	}
+	return cs.Collection
+}
+
+func (cs *ChangedMessageForSNR) GetFields() *SNRFields {
+	if cs == nil {
+		log.Println("Error ChangedMessage results: empty")
+		return nil
+	}
+	return cs.Fields
+}
+
+// GetEventName returns the specified eventName, the roomId and the event(typing or deleteMessage)
+func (cs *ChangedMessageForSNR) GetEventName() (eventName string, roomId string, event string) {
+	if f := cs.GetFields(); f != nil {
+		if len(f.EventName) > 0 && string(f.EventName[0]) != "/" && strings.Contains(f.EventName, "/") {
+			event := strings.Split(f.EventName, "/")
+			return f.EventName, event[0], event[1]
+		}
+	}
+	return "", "", ""
+}
+
+func (cs *ChangedMessageForSNR) GetArgs() []*SNRArg {
+	if f := cs.GetFields(); f != nil && len(f.Args) > 0 {
+		return f.Args
+	}
+	return nil
+}
+
+func (cs *ChangedMessageForSNR) GetMessageId() string {
+	if args := cs.GetArgs(); args != nil && len(args) > 0 {
+		return args[0].MsgId
 	}
 	return ""
 }

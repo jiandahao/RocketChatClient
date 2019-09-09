@@ -38,15 +38,27 @@ func main() {
 
 		if m == "changed" {
 			log.Println("receive changed")
-			//var changedMsg parser.ChangedMessage
-			//_ = json.Unmarshal([]byte(msgStr), &changedMsg)
-			//log.Println(changedMsg)
-			//return
 			if v, ok := msgObj["collection"]; ok {
 				if v == "stream-room-messages" {
-					parser.ParseChangesForSRM(msgStr)
+					results := parser.ParseChangesForSRM(msgStr)
+					fmt.Printf("You have a new message\n"+
+						"from:%s\n"+
+						"at:%v\n"+
+						"message:%s", results.GetSenderName(),
+						results.GetSendTime(),
+						results.GetMessage())
 				} else if v == "stream-notify-room" {
-					parser.ParseChangesForSNR(msgStr)
+					results := parser.ParseChangesForSNR(msgStr)
+					_, roomId, event := results.GetEventName()
+					fmt.Printf("collection %s\n"+
+						"Event: %s\n"+
+						"RoomId: %s\n"+
+						"Message Id: %s \n",
+						results.GetCollection(),
+						event,
+						roomId,
+						results.GetMessageId(),
+					)
 				}
 			} else {
 				fmt.Println("Unrecognizable changed message")
@@ -79,15 +91,16 @@ func main() {
 		fmt.Println("Handle close message from server")
 	}
 
-	// it is the main entry that will be excuted right after connecting to the server successfully
+	// it is the main entry that will be executed right after connecting to the server successfully
 	wsClient.MainEntry = func() {
 		// always login first
 		if err := wsClient.Login("jiandahao", "xdh5695565"); err != nil {
 			log.Println(err)
 		}
-		//	// subscribe events that you interested
+		//	// subscribe events that you are interested
 		_ = wsClient.SubscribeStreamRoomMessage("GENERAL")
 		_ = wsClient.SubscribeStreamNotifyRoom("GENERAL", "typing")
+		_ = wsClient.SubscribeStreamNotifyRoom("GENERAL", "deleteMessage")
 		_ = wsClient.SubscribeStreamNotifyUser("qd9TRc82mkGGy5m5P", "message")
 		//	_ = wsClient.GetUserRoles()
 		_ = wsClient.SendMessage("GENERAL", "it is a test message from ."+" at "+time.Now().Format("2006-01-02 15:04:05"))
