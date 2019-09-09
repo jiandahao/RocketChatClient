@@ -1,7 +1,6 @@
 package runtime_api
 
 import (
-	"encoding/json"
 	"github.com/gorilla/websocket"
 )
 
@@ -10,13 +9,12 @@ type PongMessage struct {
 }
 
 func (wc *WebSocketClient) SendPong() error {
-	msg := PongMessage{
-		Msg: "pong",
-	}
-	res, _ := json.Marshal(msg)
+	// for interacting with rocket chat server,
+	// you must response with pong (message type: websocket.TextMessage)
+	// it will not work if the message type is websocket.PongMessage
 	wc.Request <- Request{
-		mt:  websocket.PongMessage,
-		msg: res,
+		mt:  websocket.TextMessage,
+		msg: []byte("{\"msg\":\"pong\"}"),
 	}
 	return nil
 }

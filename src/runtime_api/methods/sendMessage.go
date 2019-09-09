@@ -2,7 +2,7 @@ package runtime_api
 
 import (
 	"encoding/json"
-	"github.com/google/uuid"
+	"fmt"
 	"github.com/gorilla/websocket"
 )
 
@@ -28,6 +28,9 @@ type Message struct {
 	Params []messageParams `json:"params"`
 }
 
+var messageId int64 = 1
+var sendMessageId int64 = 1
+
 type messageParams struct {
 	MsgId  string `json:"_id"` // The message id
 	RoomId string `json:"rid"` // the room id for where to send this message
@@ -37,7 +40,7 @@ type messageParams struct {
 func (wc *WebSocketClient) SendMessage(roomId string, message string) error {
 	msgParams := []messageParams{
 		{
-			MsgId:  uuid.New().String(),
+			MsgId:  fmt.Sprintf("sendmsgid:%v", sendMessageId), //uuid.New().String(),
 			RoomId: roomId,
 			Msg:    message,
 		},
@@ -46,10 +49,12 @@ func (wc *WebSocketClient) SendMessage(roomId string, message string) error {
 	msg := Message{
 		Msg:    "method",
 		Method: "sendMessage",
-		Id:     uuid.New().String(),
+		Id:     fmt.Sprintf("msgid:%v", messageId), //uuid.New().String(),
 		Params: msgParams,
 	}
 
+	messageId = messageId + 1
+	sendMessageId = sendMessageId + 1
 	res, _ := json.Marshal(msg)
 	wc.Request <- Request{
 		mt:  websocket.TextMessage,

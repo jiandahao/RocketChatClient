@@ -8,38 +8,39 @@ import (
 	"log"
 	"sync"
 	"time"
-	//"time"
 )
 
 type WebSocketClient struct {
-	// Username
-	Username string
-	// Password
-	Password string
 	// websocket connection
 	Conn *websocket.Conn
 	// ping ticker for heart beat
 	PingTicker *time.Ticker
-	// response from websocket server
+	// channel for detecting response from websocket server
 	Response chan Response
-	//
+	// channel for detecting request to websocket server
 	Request chan Request
-	//
-	wg sync.WaitGroup
-	// wait to close the connection
-	Wait2Close chan string
 
-	// subscription list
-	SubscriptionList []Subscription
-	// Ping message handler
-	PingMessageHandler  func()
-	PongMessageHandler  func()
-	TextMessageHandler  func(mt int, msgStr string, msgObj map[string]interface{})
-	CloseMessageHandler func()
+	wg sync.WaitGroup
+
+	// wait to close the connection
+	shouldClose chan string
+
+	// subscription list, it is optional
+	//	SubscriptionList []Subscription
+
+	/*message callback handlers, will be trigger
+	  when a specified message is received from server*/
+	PingMessageHandler  func() // Ping
+	PongMessageHandler  func() // Pong
+	CloseMessageHandler func() // Close
+	// Text message
+	TextMessageHandler func(msgType int, msgStr string, msgObj map[string]interface{})
+	MainEntry          func() // main task after connecting websocket socket, user specified
 }
 
-// subscription list, you can add all the subscript actions into
-// this list,  Run() function will execute all the actions after login
+/*subscription list, you could add the subscriptions into
+this list. once you have set this list , Run() function
+will execute all the subscriptions after login*/
 type Subscription struct {
 	Handler func([]string) error
 	Args    []string
@@ -64,10 +65,20 @@ func NewWebSocketClient(wsUrl string) (*WebSocketClient, error) {
 	}
 	wsClient.wg.Add(2)
 	wsClient.Conn = conn
-	wsClient.PingTicker = nil
+	wsClient.PingTicker = time.NewTicker(time.Second * 10)
 	wsClient.Response = make(chan Response)
 	wsClient.Request = make(chan Request)
-	wsClient.Wait2Close = make(chan string)
+	wsClient.shouldClose = make(chan string)
+	//wsClient.Conn.SetPongHandler(func(message string) error {
+	//	fmt.Println("received pong message")
+	//	err := wsClient.Conn.WriteControl(websocket.PingMessage, []byte(`{"msg":"ping"}`), time.Now().Add(10*time.Second))
+	//	return err
+	//})
+	//wsClient.Conn.SetPingHandler(func(appData string) error {
+	//	fmt.Println("received ping message ")
+	//	err := wsClient.Conn.WriteControl(websocket.PongMessage, []byte(`{"msg":"pong"}`), time.Now().Add(30*time.Second))
+	//	return err
+	//})
 	return wsClient, nil
 }
 
@@ -76,12 +87,31 @@ func (wc *WebSocketClient) Close() {
 	wc.Conn.Close()
 	close(wc.Response)
 	close(wc.Request)
-	close(wc.Wait2Close)
+	close(wc.shouldClose)
+	wc.PingTicker.Stop()
 }
 
 func (wc *WebSocketClient) Run() error {
 	if wc == nil {
 		return errors.New("invalid websocket connector ")
+	}
+
+	if wc.PingMessageHandler == nil {
+		// if ping message callback is nil, set a default one
+		wc.PingMessageHandler = func() {
+			if err := wc.SendPong(); err != nil {
+				log.Println(err)
+			}
+		}
+	}
+
+	if wc.PongMessageHandler == nil {
+		// if pong message callback is nil, set a default one
+		wc.PongMessageHandler = func() {
+			if err := wc.SendPing(); err != nil {
+				log.Println(err)
+			}
+		}
 	}
 
 	go wc.ReadMessage()
@@ -93,21 +123,17 @@ func (wc *WebSocketClient) Run() error {
 		log.Println(err)
 		return errors.New("Error occurs when create a connection ")
 	}
-
-	if err := wc.Login(wc.Username, wc.Password); err != nil {
-		log.Println(err)
-		return errors.New("Error occurs when login ")
-	}
-
-	for _, sub := range wc.SubscriptionList {
-		_ = sub.Handler(sub.Args)
+	//for _, sub := range wc.SubscriptionList {
+	//	_ = sub.Handler(sub.Args)
+	//}
+	if wc.MainEntry != nil {
+		go wc.MainEntry()
 	}
 
 	// waiting to close the websocket client
-	<-wc.Wait2Close
 	wc.wg.Wait() //
 	// do closing
-	fmt.Println("going to close")
+	fmt.Println("Main run routine going to close")
 	wc.Close()
 	return nil
 }
@@ -118,40 +144,32 @@ func (wc *WebSocketClient) Done() error {
 
 func (wc *WebSocketClient) ReadMessage() {
 	defer func() {
-		fmt.Println("======3=====")
+		log.Println("======ReadMessage Function exit=====")
 		wc.Conn.Close()
 	}()
 	for {
 		mt, p, err := wc.Conn.ReadMessage()
+		if err != nil {
+			log.Println("error occurs: ", mt, string(p), err)
+			wc.wg.Done()
+			wc.shouldClose <- "close" // error occurs, tell write goroutine to exit
+			break
+		}
 		var msg map[string]interface{}
 		_ = json.Unmarshal(p, &msg)
 
-		if err != nil {
-			log.Println(err)
-			//TODO send a close message
-			wc.wg.Done()
-			wc.Wait2Close <- "close"
-			return
-		}
-
-		if mt == websocket.CloseMessage {
-			wc.CloseMessageHandler()
-			wc.wg.Done()
-			wc.Wait2Close <- "close"
-			return
-		}
-
+		// Note: actually, the message type could not be PongMessage / PingMessage/Close Message
+		// the PongMessage/PingMessage/CloseMessage will be handle by function that
+		// binded with wc.Conn.SetPongHandler/wc.Conn.SetPingHandler/wc.Conn.SetCloseHandler
 		if mt == websocket.PongMessage || msg["msg"] == "pong" {
-			fmt.Println("receive a pong message from server")
+			log.Println("receive a pong message from server")
 			wc.PongMessageHandler()
-			wc.PingMessageHandler()
 			continue
 		}
 
 		if mt == websocket.PingMessage || msg["msg"] == "ping" {
-			fmt.Println("receive a ping message from server")
+			log.Println("receive a ping message from server")
 			wc.PingMessageHandler()
-			//wc.PongMessageHandler()
 			continue
 		}
 
@@ -166,22 +184,23 @@ func (wc *WebSocketClient) ReadMessage() {
 
 func (wc *WebSocketClient) WriteMessage() {
 	defer func() {
-		fmt.Println("=====1======")
+		fmt.Println("======WriteMessage Function exit=====")
 		wc.Conn.Close()
 	}()
 	for {
 		select {
 		case req := <-wc.Request:
-			fmt.Println("send request: ", string(req.msg))
+			log.Println("send request: ", string(req.msg))
 			if err := wc.Conn.WriteMessage(req.mt, req.msg); err != nil {
-				//TODO send a close message
 				log.Println(err)
 				wc.wg.Done()
 				return
 			}
-		case <-wc.Wait2Close:
-			fmt.Println("Write routine going to close")
+		case <-wc.shouldClose:
+			log.Println("Write routine going to close")
 			wc.wg.Done()
+			return
 		}
+
 	}
 }

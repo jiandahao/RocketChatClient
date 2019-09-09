@@ -21,7 +21,6 @@ subscriptions-changed
 */
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -39,12 +38,7 @@ Params:
 	args[0]     userId
 	args[1] 	eventName
 */
-func (wc *WebSocketClient) SubscribeStreamNotifyUser(args []string) error {
-	if len(args) != 2 {
-		return errors.New(fmt.Sprintf("wrong argument numbers, want 2 but get %s", len(args)))
-	}
-	userId := args[0]
-	eventName := args[1]
+func (wc *WebSocketClient) SubscribeStreamNotifyUser(userId string, eventName string) error {
 	params := []interface{}{
 		fmt.Sprintf("%s/%s", userId, eventName),
 		false,

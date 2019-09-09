@@ -26,7 +26,7 @@ func (wc *WebSocketClient) Connect() error {
 		Msg:     "connect",
 		Version: "1",
 		Support: []string{
-			"1", "pre2", "pre1",
+			"1", // "pre2", "pre1",
 		},
 	}
 	connInfoJson, _ := json.Marshal(connInfo)

@@ -17,7 +17,7 @@ func (wc *WebSocketClient) SendPing() error {
 	//fmt.Println("send a ping to server: ",string(res))
 
 	wc.Request <- Request{
-		mt:  websocket.PingMessage,
+		mt:  websocket.TextMessage,
 		msg: res,
 	}
 	return nil
